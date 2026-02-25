@@ -1,31 +1,16 @@
+// Bootstrap global proxy before importing discord.js
 require('dotenv').config();
+
+// Initialize global proxy
+const { bootstrap } = require('global-agent');
+
+bootstrap();
+console.log('✅ 全局代理已启用');
+console.log('📡 代理地址: http://192.168.10.204:16699\n');
+
+// Now import discord.js
 const { Client, GatewayIntentBits, EmbedBuilder } = require('discord.js');
 const OpenAI = require('openai');
-const { SocksProxyAgent } = require('socks-proxy-agent');
-
-// Configure proxy for Discord
-let discordOptions = {
-    intents: [
-        GatewayIntentBits.Guilds,
-        GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.MessageContent
-    ]
-};
-
-if (process.env.PROXY_URL) {
-    const proxyAgent = new SocksProxyAgent(process.env.PROXY_URL);
-    discordOptions.agent = proxyAgent;
-    console.log(`🔧 Using proxy: ${process.env.PROXY_URL}`);
-}
-
-// Create Discord client
-const client = new Client(discordOptions);
-
-// Initialize OpenAI client with gptsapi.net
-const openai = new OpenAI({
-    apiKey: process.env.GPTSAPI_KEY,
-    baseURL: 'https://api.gptsapi.net/v1'
-});
 
 // Bot configuration
 const CONFIG = {
@@ -34,11 +19,26 @@ const CONFIG = {
     temperature: 0.7
 };
 
-// Conversation memory (simple in-memory storage)
+// Conversation memory
 const conversations = new Map();
 
 // System prompt
 const SYSTEM_PROMPT = `You are a helpful AI assistant powered by Gemini 3 Flash Preview. You are friendly, knowledgeable, and concise in your responses.`;
+
+// Create Discord client
+const client = new Client({
+    intents: [
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildMessages,
+        GatewayIntentBits.MessageContent
+    ]
+});
+
+// Initialize OpenAI client
+const openai = new OpenAI({
+    apiKey: process.env.GPTSAPI_KEY,
+    baseURL: 'https://api.gptsapi.net/v1'
+});
 
 // When bot is ready
 client.once('ready', () => {
@@ -49,32 +49,26 @@ client.once('ready', () => {
 
 // Handle messages
 client.on('messageCreate', async (message) => {
-    // Ignore bot messages
     if (message.author.bot) return;
 
-    // Check if message mentions the bot or starts with prefix
     const prefix = process.env.PREFIX || '!';
     const isMentioned = message.mentions.has(client.user);
     const hasPrefix = message.content.startsWith(prefix);
 
     if (!isMentioned && !hasPrefix) return;
 
-    // Get user message content
     let userMessage = message.content;
     if (hasPrefix) {
         userMessage = userMessage.slice(prefix.length).trim();
     } else {
-        // Remove bot mention from message
         userMessage = userMessage.replace(new RegExp(`<@!?${client.user.id}>`), '').trim();
     }
 
     if (!userMessage) return;
 
-    // Show typing indicator
     await message.channel.sendTyping();
 
     try {
-        // Get or create conversation history for this user
         const userId = message.author.id;
         if (!conversations.has(userId)) {
             conversations.set(userId, [
@@ -83,16 +77,12 @@ client.on('messageCreate', async (message) => {
         }
 
         const history = conversations.get(userId);
-
-        // Add user message to history
         history.push({ role: 'user', content: userMessage });
 
-        // Keep only last 20 messages to save tokens
         if (history.length > 20) {
             history.splice(0, history.length - 20);
         }
 
-        // Call API
         const completion = await openai.chat.completions.create({
             model: CONFIG.model,
             messages: history,
@@ -101,11 +91,8 @@ client.on('messageCreate', async (message) => {
         });
 
         const response = completion.choices[0].message.content;
-
-        // Add assistant response to history
         history.push({ role: 'assistant', content: response });
 
-        // Create embed for response
         const embed = new EmbedBuilder()
             .setColor(0x00FF99)
             .setDescription(response)
@@ -199,7 +186,7 @@ client.on('interactionCreate', async (interaction) => {
     }
 });
 
-// Register slash commands on bot ready
+// Register slash commands
 client.once('ready', async () => {
     const commands = [
         {
@@ -208,7 +195,7 @@ client.once('ready', async () => {
             options: [
                 {
                     name: 'message',
-                    type: 3, // STRING
+                    type: 3,
                     description: 'Your message to Gemini',
                     required: true
                 }
@@ -233,4 +220,5 @@ client.once('ready', async () => {
 });
 
 // Login
+console.log('🚀 正在连接到 Discord...\n');
 client.login(process.env.DISCORD_TOKEN);

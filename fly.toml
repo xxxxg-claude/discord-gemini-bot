@@ -1,0 +1,27 @@
+app = "discord-gemini-bot"
+primary_region = "sjc"
+
+[build]
+  [build.command]
+    default = "npm install"
+
+[env]
+  PORT = "8080"
+
+[processes]
+  app = "node bot-fly.js"
+
+[[services]]
+  protocol = "tcp"
+  internal_port = 8080
+  processes = ["app"]
+
+  [[services.ports]]
+    port = 8080
+    handlers = ["http"]
+
+  [[services.tcp_checks]]
+    interval = "15s"
+    timeout = "2s"
+    grace_period = "5s"
+    restart_limit = 0

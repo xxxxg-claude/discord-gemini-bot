@@ -2,9 +2,32 @@ require('dotenv').config();
 const { Client, GatewayIntentBits, EmbedBuilder } = require('discord.js');
 const OpenAI = require('openai');
 const { SocksProxyAgent } = require('socks-proxy-agent');
+const { HttpsProxyAgent } = require('https-proxy-agent');
 
-// Configure proxy for Discord
-let discordOptions = {
+console.log('🚀 Discord Gemini Bot 启动中...\n');
+
+// Try different proxy configurations
+let agent = null;
+const proxyUrl = process.env.PROXY_URL;
+
+if (proxyUrl) {
+    console.log(`🔧 配置代理: ${proxyUrl}`);
+
+    try {
+        if (proxyUrl.startsWith('socks')) {
+            agent = new SocksProxyAgent(proxyUrl);
+            console.log('✅ 使用 SOCKS 代理');
+        } else if (proxyUrl.startsWith('http')) {
+            agent = new HttpsProxyAgent(proxyUrl);
+            console.log('✅ 使用 HTTP 代理');
+        }
+    } catch (error) {
+        console.error('⚠️  代理配置失败:', error.message);
+    }
+}
+
+// Create Discord client
+const clientOptions = {
     intents: [
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,
@@ -12,16 +35,13 @@ let discordOptions = {
     ]
 };
 
-if (process.env.PROXY_URL) {
-    const proxyAgent = new SocksProxyAgent(process.env.PROXY_URL);
-    discordOptions.agent = proxyAgent;
-    console.log(`🔧 Using proxy: ${process.env.PROXY_URL}`);
+if (agent) {
+    clientOptions.agent = agent;
 }
 
-// Create Discord client
-const client = new Client(discordOptions);
+const client = new Client(clientOptions);
 
-// Initialize OpenAI client with gptsapi.net
+// Initialize OpenAI client
 const openai = new OpenAI({
     apiKey: process.env.GPTSAPI_KEY,
     baseURL: 'https://api.gptsapi.net/v1'
@@ -34,7 +54,7 @@ const CONFIG = {
     temperature: 0.7
 };
 
-// Conversation memory (simple in-memory storage)
+// Conversation memory
 const conversations = new Map();
 
 // System prompt
@@ -42,39 +62,38 @@ const SYSTEM_PROMPT = `You are a helpful AI assistant powered by Gemini 3 Flash 
 
 // When bot is ready
 client.once('ready', () => {
-    console.log(`✅ Bot logged in as ${client.user.tag}`);
-    console.log(`📱 Serving ${client.guilds.cache.size} servers`);
+    console.log(`\n✅ Bot 已登录!`);
+    console.log(`📌 名称: ${client.user.tag}`);
+    console.log(`📌 ID: ${client.user.id}`);
+    console.log(`📱 服务: ${client.guilds.cache.size} 个服务器`);
     client.user.setActivity('Gemini 3 Flash', { type: 'PLAYING' });
+    console.log('\n🎉 Bot 正在运行!\n');
 });
 
 // Handle messages
 client.on('messageCreate', async (message) => {
-    // Ignore bot messages
     if (message.author.bot) return;
 
-    // Check if message mentions the bot or starts with prefix
     const prefix = process.env.PREFIX || '!';
     const isMentioned = message.mentions.has(client.user);
     const hasPrefix = message.content.startsWith(prefix);
 
     if (!isMentioned && !hasPrefix) return;
 
-    // Get user message content
     let userMessage = message.content;
     if (hasPrefix) {
         userMessage = userMessage.slice(prefix.length).trim();
     } else {
-        // Remove bot mention from message
         userMessage = userMessage.replace(new RegExp(`<@!?${client.user.id}>`), '').trim();
     }
 
     if (!userMessage) return;
 
-    // Show typing indicator
-    await message.channel.sendTyping();
+    console.log(`\n📨 收到消息: ${userMessage}`);
 
     try {
-        // Get or create conversation history for this user
+        await message.channel.sendTyping();
+
         const userId = message.author.id;
         if (!conversations.has(userId)) {
             conversations.set(userId, [
@@ -83,16 +102,14 @@ client.on('messageCreate', async (message) => {
         }
 
         const history = conversations.get(userId);
-
-        // Add user message to history
         history.push({ role: 'user', content: userMessage });
 
-        // Keep only last 20 messages to save tokens
         if (history.length > 20) {
             history.splice(0, history.length - 20);
         }
 
-        // Call API
+        console.log('🤖 调用 Gemini API...');
+
         const completion = await openai.chat.completions.create({
             model: CONFIG.model,
             messages: history,
@@ -101,11 +118,10 @@ client.on('messageCreate', async (message) => {
         });
 
         const response = completion.choices[0].message.content;
-
-        // Add assistant response to history
         history.push({ role: 'assistant', content: response });
 
-        // Create embed for response
+        console.log(`✅ 回复: ${response.substring(0, 50)}...`);
+
         const embed = new EmbedBuilder()
             .setColor(0x00FF99)
             .setDescription(response)
@@ -115,7 +131,7 @@ client.on('messageCreate', async (message) => {
         await message.reply({ embeds: [embed] });
 
     } catch (error) {
-        console.error('API Error:', error.message);
+        console.error('❌ 错误:', error.message);
         const errorEmbed = new EmbedBuilder()
             .setColor(0xFF0000)
             .setTitle('❌ Error')
@@ -169,7 +185,7 @@ client.on('interactionCreate', async (interaction) => {
             await interaction.editReply({ embeds: [embed] });
 
         } catch (error) {
-            console.error('API Error:', error.message);
+            console.error('❌ 错误:', error.message);
             const errorEmbed = new EmbedBuilder()
                 .setColor(0xFF0000)
                 .setTitle('❌ Error')
@@ -199,7 +215,7 @@ client.on('interactionCreate', async (interaction) => {
     }
 });
 
-// Register slash commands on bot ready
+// Register slash commands
 client.once('ready', async () => {
     const commands = [
         {
@@ -208,7 +224,7 @@ client.once('ready', async () => {
             options: [
                 {
                     name: 'message',
-                    type: 3, // STRING
+                    type: 3,
                     description: 'Your message to Gemini',
                     required: true
                 }
@@ -226,11 +242,21 @@ client.once('ready', async () => {
 
     try {
         await client.application.commands.set(commands);
-        console.log('✅ Slash commands registered');
+        console.log('✅ 斜杠命令已注册\n');
     } catch (error) {
-        console.error('Failed to register commands:', error.message);
+        console.error('⚠️  命令注册失败:', error.message);
     }
 });
 
+// Error handling
+client.on('error', (error) => {
+    console.error('❌ Discord 错误:', error.message);
+});
+
+process.on('unhandledRejection', (error) => {
+    console.error('❌ 未处理的 Promise 拒绝:', error);
+});
+
 // Login
+console.log('🔗 正在连接到 Discord...\n');
 client.login(process.env.DISCORD_TOKEN);
