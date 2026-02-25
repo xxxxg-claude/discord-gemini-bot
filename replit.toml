@@ -1,0 +1,11 @@
+# Replit 配置文件
+
+[runner]
+language = "nodejs"
+version = "18"
+
+[env]
+PORT = "3000"
+
+[deployment]
+run = ["node server.js"]
