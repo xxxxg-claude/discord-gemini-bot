@@ -1,0 +1,18 @@
+services:
+  # Discord Bot Service
+  - type: worker
+    name: discord-gemini-bot
+    runtime: node
+    buildCommand: npm install
+    startCommand: node bot-fly.js
+    env: node
+    region: singapore
+    plan: free
+    envVars:
+      - key: DISCORD_TOKEN
+        sync: false
+      - key: GPTSAPI_KEY
+        sync: false
+      - key: PREFIX
+        value: "!"
+    autoDeploy: true
