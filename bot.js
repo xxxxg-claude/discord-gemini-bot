@@ -1,7 +1,6 @@
 require('dotenv').config();
 const { Client, GatewayIntentBits, EmbedBuilder } = require('discord.js');
 const OpenAI = require('openai');
-const { SocksProxyAgent } = require('socks-proxy-agent');
 
 // ==================== 配置 ====================
 
@@ -13,12 +12,6 @@ let discordOptions = {
         GatewayIntentBits.MessageContent
     ]
 };
-
-if (process.env.PROXY_URL) {
-    const proxyAgent = new SocksProxyAgent(process.env.PROXY_URL);
-    discordOptions.agent = proxyAgent;
-    console.log(`🔧 Using proxy: ${process.env.PROXY_URL}`);
-}
 
 const client = new Client(discordOptions);
 
