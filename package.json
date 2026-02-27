@@ -2,10 +2,10 @@
   "name": "discord-gemini-bot",
   "version": "1.0.0",
   "description": "Discord bot using Gemini 3 Flash from gptsapi.net",
-  "main": "server.js",
+  "main": "bot.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node server.js",
+    "start": "node bot.js",
+    "dev": "node bot.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [
